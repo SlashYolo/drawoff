@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Drawoff — Летопись в картинках</title>
+  <meta name="description" content="Онлайн-игра: рисуйте иллюстрации к сказаниям, которые пишет нейросеть, и выбирайте лучшие.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪶</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Ruslan+Display&family=Kurale&family=Old+Standard+TT:ital,wght@0,400;0,700;1,400&display=swap&subset=cyrillic" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar hidden" id="topbar">
+    <div class="topbar__brand">Drawoff</div>
+    <div class="topbar__room">Комната <b id="topbar-code">—</b></div>
+    <div class="timer hidden" id="timer" aria-live="polite">
+      <span class="timer__glass" aria-hidden="true">⌛</span>
+      <span id="timer-text">0:00</span>
+    </div>
+    <button class="btn btn--ghost btn--small" id="leave-btn" type="button">Покинуть</button>
+  </header>
+
+  <main id="app">
+    <!-- Главный экран -->
+    <section class="screen" id="screen-home">
+      <div class="scroll home">
+        <div class="home__crest" aria-hidden="true">🪶</div>
+        <h1 class="title">Drawoff</h1>
+        <p class="subtitle">Летопись в картинках</p>
+        <p class="home__lead">Летописец сочиняет сказание, а вы, придворные живописцы, украшаете его страницы иллюстрациями. Лучший рисунок получит славу и лайки!</p>
+
+        <form class="home__form" id="home-form" autocomplete="off">
+          <label class="field">
+            <span class="field__label">Ваше имя</span>
+            <input class="input" id="name-input" maxlength="20" placeholder="Сэр Ланцелот" required>
+          </label>
+          <button class="btn btn--seal btn--big" id="play-btn" type="submit">Играть</button>
+          <div class="divider"><span>или войти по коду</span></div>
+          <div class="home__join">
+            <input class="input input--code" id="code-input" maxlength="5" placeholder="КОД" aria-label="Код комнаты">
+            <button class="btn" id="join-btn" type="button">Войти</button>
+          </div>
+          <p class="error" id="home-error" role="alert"></p>
+        </form>
+
+        <details class="rules">
+          <summary>Правила игры</summary>
+          <ol>
+            <li>Соберите друзей в комнате (от 2 до 8 игроков) и начните игру.</li>
+            <li>Нейросеть пишет сказание: столько страниц, сколько вас за столом.</li>
+            <li><b>Минута</b> на чтение: выберите страницу, которую хотите нарисовать. Выбор добровольный — если двое выбрали одну, бросаем монетку, а проигравшему достаётся оставшаяся страница.</li>
+            <li><b>Три минуты</b> на рисование.</li>
+            <li>Книга перелистывается страница за страницей, а затем все ставят лайки понравившимся иллюстрациям.</li>
+          </ol>
+        </details>
+      </div>
+    </section>
+
+    <!-- Лобби -->
+    <section class="screen hidden" id="screen-lobby">
+      <div class="scroll lobby">
+        <h2 class="heading">Сбор в зале</h2>
+        <p class="muted">Назовите друзьям код комнаты или пошлите им ссылку.</p>
+        <div class="lobby__code">
+          <span class="lobby__code-value" id="lobby-code">—</span>
+          <button class="btn btn--small" id="copy-link-btn" type="button">Скопировать ссылку</button>
+        </div>
+        <ul class="players" id="lobby-players"></ul>
+        <p class="muted" id="lobby-hint"></p>
+        <button class="btn btn--seal btn--big" id="start-btn" type="button">Начать игру</button>
+        <p class="error" id="lobby-error" role="alert"></p>
+      </div>
+    </section>
+
+    <!-- Генерация -->
+    <section class="screen hidden" id="screen-generating">
+      <div class="scroll center">
+        <div class="quill" aria-hidden="true">🪶</div>
+        <h2 class="heading">Летописец пишет сказание…</h2>
+        <p class="muted">Чернила ещё не высохли. Это займёт несколько мгновений.</p>
+      </div>
+    </section>
+
+    <!-- Чтение и выбор страницы -->
+    <section class="screen hidden" id="screen-reading">
+      <div class="scroll reading">
+        <h2 class="story-title" id="reading-title"></h2>
+        <p class="muted">Прочтите сказание и выберите страницу, которую хотите иллюстрировать. Выбор необязателен.</p>
+        <ol class="pages" id="reading-pages"></ol>
+        <div class="reading__actions">
+          <button class="btn btn--seal" id="ready-btn" type="button">Я готов рисовать</button>
+          <span class="muted" id="ready-count"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Жребий -->
+    <section class="screen hidden" id="screen-lots">
+      <div class="scroll center">
+        <h2 class="heading">Жребий брошен!</h2>
+        <div class="lots" id="lots"></div>
+        <p class="lots__mine" id="lots-mine"></p>
+      </div>
+    </section>
+
+    <!-- Рисование -->
+    <section class="screen hidden" id="screen-drawing">
+      <div class="drawing">
+        <aside class="drawing__page scroll">
+          <div class="drawing__page-num" id="draw-page-num"></div>
+          <p class="drawing__text" id="draw-text"></p>
+          <p class="drawing__scene"><b>Что нарисовать:</b> <span id="draw-scene"></span></p>
+          <details class="drawing__story">
+            <summary>Всё сказание</summary>
+            <ol id="draw-story"></ol>
+          </details>
+        </aside>
+        <div class="drawing__main">
+          <div class="paint" id="paint"></div>
+          <div class="drawing__submit">
+            <span class="muted" id="submit-status"></span>
+            <button class="btn btn--seal" id="submit-btn" type="button">Сдать работу</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Перелистывание книги -->
+    <section class="screen hidden" id="screen-reveal">
+      <div class="book-wrap">
+        <div class="book" id="book"></div>
+        <div class="book__controls">
+          <span class="book__counter" id="book-counter"></span>
+          <button class="btn btn--small" id="next-page-btn" type="button">Перелистнуть ▸</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Голосование -->
+    <section class="screen hidden" id="screen-voting">
+      <div class="scroll voting">
+        <h2 class="heading">Кому достанется слава?</h2>
+        <p class="muted">Отметьте иллюстрации, которые вам понравились. Можно выбрать сколько угодно, кроме своей.</p>
+        <div class="gallery" id="vote-gallery"></div>
+        <div class="reading__actions">
+          <button class="btn btn--seal" id="vote-done-btn" type="button">Готово</button>
+          <span class="muted" id="vote-count"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Итоги -->
+    <section class="screen hidden" id="screen-results">
+      <div class="scroll results">
+        <h2 class="heading">Итоги сказания</h2>
+        <h3 class="story-title story-title--small" id="results-title"></h3>
+        <ol class="podium" id="results-list"></ol>
+        <h3 class="heading heading--small">Общий счёт</h3>
+        <ul class="players players--score" id="results-scores"></ul>
+        <button class="btn btn--seal btn--big" id="again-btn" type="button">Новое сказание</button>
+        <p class="muted" id="results-hint"></p>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast hidden" id="toast" role="status"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/paint.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

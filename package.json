@@ -1,0 +1,25 @@
+{
+  "name": "drawoff",
+  "version": "1.0.0",
+  "description": "Онлайн-игра: рисуйте иллюстрации к сгенерированным нейросетью историям и выбирайте лучшую",
+  "main": "server/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SlashYolo/drawoff.git"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "express": "^5.2.1",
+    "socket.io": "^4.8.4"
+  }
+}
