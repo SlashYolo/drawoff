@@ -263,7 +263,7 @@
       const who = pickers[i] || [];
       return el('li', { class: `page-card${chosen ? ' is-chosen' : ''}${who.length > 1 ? ' is-contested' : ''}` },
         el('div', { class: 'page-card__num', text: `Страница ${roman(i)}` }),
-        el('p', { class: 'page-card__text illuminated', text: p.text }),
+        el('p', { class: 'page-card__text', text: p.text }),
         el('p', { class: 'page-card__scene', text: `Сцена: ${p.scene}` }),
         el('div', { class: 'page-card__footer' },
           el('div', { class: 'page-card__who' }, ...who.map((id) => el('span', { class: `chip${id === state.you ? ' chip--me' : ''}`, text: nameOf(id) }))),
