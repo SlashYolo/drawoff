@@ -8,7 +8,7 @@
 (function () {
   const WIDTH = 800;
   const HEIGHT = 600;
-  const PAPER = '#fbf6e9';
+  const PAPER = '#ffffff';
   const HISTORY_LIMIT = 40;
 
   const PALETTE = [
@@ -44,6 +44,29 @@
     return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
   }
 
+  // HSV: h — 0..360, s и v — 0..1.
+  function rgbToHsv({ r, g, b }) {
+    const R = r / 255, G = g / 255, B = b / 255;
+    const max = Math.max(R, G, B), min = Math.min(R, G, B);
+    const d = max - min;
+    let h = 0;
+    if (d) {
+      if (max === R) h = ((G - B) / d) % 6;
+      else if (max === G) h = (B - R) / d + 2;
+      else h = (R - G) / d + 4;
+      h = (h * 60 + 360) % 360;
+    }
+    return { h, s: max ? d / max : 0, v: max };
+  }
+
+  function hsvToRgb({ h, s, v }) {
+    const f = (n) => {
+      const k = (n + h / 60) % 6;
+      return Math.round(255 * (v - v * s * Math.max(0, Math.min(k, 4 - k, 1))));
+    };
+    return { r: f(5), g: f(3), b: f(1) };
+  }
+
   class Paint {
     constructor(root) {
       this.root = root;
@@ -65,7 +88,32 @@
 
     build() {
       this.root.innerHTML = `
-        <div class="paint__tools" role="toolbar" aria-label="Инструменты">
+        <div class="paint__tools" role="toolbar" aria-label="Инструменты" aria-orientation="vertical">
+          <div class="paint__color">
+            <button type="button" class="color-btn" data-action="color" title="Цвет — нажмите, чтобы выбрать" aria-label="Выбрать цвет" aria-haspopup="dialog" aria-expanded="false">
+              <span class="color-btn__fill"></span>
+            </button>
+            <div class="color-pop hidden" role="dialog" aria-label="Выбор цвета">
+              <div class="color-pop__title">Цвет</div>
+              <div class="wheel" data-wheel>
+                <div class="wheel__shade"></div>
+                <div class="wheel__marker"></div>
+              </div>
+              <label class="color-pop__row">
+                <span>Яркость</span>
+                <input type="range" class="value-range" min="0" max="100" step="1" data-input="value" aria-label="Яркость">
+              </label>
+              <div class="rgb-inputs">
+                ${['r', 'g', 'b'].map((c) => `
+                  <label>${c.toUpperCase()}<input class="input input--num" type="number" min="0" max="255" data-input="${c}" aria-label="${c.toUpperCase()}"></label>`).join('')}
+                <label>HEX<input class="input input--hex" data-input="hex" maxlength="7" aria-label="HEX-код цвета"></label>
+              </div>
+              <div class="swatches">
+                ${PALETTE.map((c) => `<button type="button" class="swatch" data-color="${c}" style="background:${c}" title="${c}" aria-label="Цвет ${c}"></button>`).join('')}
+              </div>
+            </div>
+          </div>
+          <span class="paint__sep"></span>
           ${TOOLS.map((t) => `<button type="button" class="tool" data-tool="${t.id}" title="${t.label} (${t.key.toUpperCase()})" aria-label="${t.label}">${svg(t.icon)}</button>`).join('')}
           <span class="paint__sep"></span>
           <button type="button" class="tool" data-action="shape-fill" title="Фигуры: контур или заливка" aria-label="Фигуры: контур или заливка">${svg('<rect x="5" y="5" width="14" height="14" rx="1"/>')}</button>
@@ -79,32 +127,15 @@
           <div class="paint__lock hidden">Работа сдана</div>
         </div>
         <div class="paint__panel">
-          <div class="paint__group">
-            <label class="slider">
-              <span>Толщина <output data-out="size"></output></span>
-              <input type="range" min="1" max="80" step="1" data-input="size">
-            </label>
-            <span class="paint__preview" aria-hidden="true"><span></span></span>
-            <label class="slider">
-              <span>Прозрачность <output data-out="opacity"></output></span>
-              <input type="range" min="5" max="100" step="1" data-input="opacity">
-            </label>
-          </div>
-          <div class="paint__group paint__color">
-            <div class="paint__current">
-              <input type="color" data-input="native" title="Палитра" aria-label="Выбрать цвет">
-              <input class="input input--hex" data-input="hex" maxlength="7" aria-label="HEX-код цвета">
-            </div>
-            ${['r', 'g', 'b'].map((c) => `
-              <label class="slider slider--rgb slider--${c}">
-                <span>${c.toUpperCase()}</span>
-                <input type="range" min="0" max="255" step="1" data-input="${c}">
-                <input class="input input--num" type="number" min="0" max="255" data-input="${c}-num" aria-label="${c.toUpperCase()}">
-              </label>`).join('')}
-            <div class="swatches">
-              ${PALETTE.map((c) => `<button type="button" class="swatch" data-color="${c}" style="background:${c}" title="${c}" aria-label="Цвет ${c}"></button>`).join('')}
-            </div>
-          </div>
+          <label class="slider">
+            <span>Толщина <output data-out="size"></output></span>
+            <input type="range" min="1" max="80" step="1" data-input="size">
+          </label>
+          <span class="paint__preview" aria-hidden="true"><span></span></span>
+          <label class="slider">
+            <span>Прозрачность <output data-out="opacity"></output></span>
+            <input type="range" min="5" max="100" step="1" data-input="opacity">
+          </label>
         </div>`;
 
       this.canvas = this.root.querySelector('.paint__canvas');
@@ -113,6 +144,8 @@
       this.octx = this.overlay.getContext('2d');
       this.lockEl = this.root.querySelector('.paint__lock');
       this.q = (sel) => this.root.querySelector(sel);
+      this.pop = this.q('.color-pop');
+      this.wheel = this.q('[data-wheel]');
 
       this.root.querySelectorAll('[data-tool]').forEach((b) => b.addEventListener('click', () => this.setTool(b.dataset.tool)));
       this.q('[data-action="undo"]').addEventListener('click', () => this.undo());
@@ -127,21 +160,46 @@
 
       this.q('[data-input="size"]').addEventListener('input', (e) => { this.size = +e.target.value; this.syncUI(); });
       this.q('[data-input="opacity"]').addEventListener('input', (e) => { this.opacity = +e.target.value / 100; this.syncUI(); });
-      ['r', 'g', 'b'].forEach((c) => {
-        const onInput = (e) => {
-          const val = Math.max(0, Math.min(255, Math.round(+e.target.value || 0)));
-          this.color = { ...this.color, [c]: val };
-          this.syncUI();
-        };
-        this.q(`[data-input="${c}"]`).addEventListener('input', onInput);
-        this.q(`[data-input="${c}-num"]`).addEventListener('change', onInput);
+
+      // Цветовой круг: оттенок — угол, насыщенность — расстояние от центра, яркость — ползунок.
+      this.q('[data-action="color"]').addEventListener('click', () => this.togglePopover());
+      const pickFromWheel = (e) => {
+        const rect = this.wheel.getBoundingClientRect();
+        const r = rect.width / 2;
+        const dx = e.clientX - rect.left - r;
+        const dy = e.clientY - rect.top - r;
+        const h = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
+        const s = Math.min(1, Math.hypot(dx, dy) / r);
+        // Если цвет был слишком тёмным, при выборе на круге поднимаем яркость, иначе круг «не работает».
+        const v = this.hsv.v < 0.15 ? 1 : this.hsv.v;
+        this.setHsv({ h, s, v });
+      };
+      this.wheel.addEventListener('pointerdown', (e) => {
+        this.wheel.setPointerCapture(e.pointerId);
+        this.wheelDrag = true;
+        pickFromWheel(e);
       });
-      this.q('[data-input="native"]').addEventListener('input', (e) => this.setColor(e.target.value));
+      this.wheel.addEventListener('pointermove', (e) => { if (this.wheelDrag) pickFromWheel(e); });
+      const stopWheel = () => { this.wheelDrag = false; };
+      this.wheel.addEventListener('pointerup', stopWheel);
+      this.wheel.addEventListener('pointercancel', stopWheel);
+      this.q('[data-input="value"]').addEventListener('input', (e) => this.setHsv({ ...this.hsv, v: +e.target.value / 100 }));
+      ['r', 'g', 'b'].forEach((c) => {
+        this.q(`[data-input="${c}"]`).addEventListener('change', (e) => {
+          const val = Math.max(0, Math.min(255, Math.round(+e.target.value || 0)));
+          this.setColor(rgbToHex({ ...this.color, [c]: val }));
+        });
+      });
       this.q('[data-input="hex"]').addEventListener('change', (e) => {
         const hex = e.target.value.startsWith('#') ? e.target.value : '#' + e.target.value;
         if (!this.setColor(hex)) this.syncUI();
       });
       this.root.querySelectorAll('.swatch').forEach((s) => s.addEventListener('click', () => this.setColor(s.dataset.color)));
+
+      // Закрытие попапа кликом мимо него или клавишей Escape.
+      document.addEventListener('pointerdown', (e) => {
+        if (!this.pop.classList.contains('hidden') && !e.target.closest('.paint__color')) this.togglePopover(false);
+      });
 
       this.overlay.addEventListener('pointerdown', (e) => this.onDown(e));
       this.overlay.addEventListener('pointermove', (e) => this.onMove(e));
@@ -149,12 +207,21 @@
       this.overlay.addEventListener('pointercancel', (e) => this.onUp(e));
       this.overlay.addEventListener('contextmenu', (e) => e.preventDefault());
 
+      this.hsv = rgbToHsv(this.color);
       this.syncUI();
+    }
+
+    togglePopover(open) {
+      const show = open === undefined ? this.pop.classList.contains('hidden') : open;
+      if (show && this.locked) return;
+      this.pop.classList.toggle('hidden', !show);
+      this.q('[data-action="color"]').setAttribute('aria-expanded', String(show));
     }
 
     bindKeys() {
       this.keyHandler = (e) => {
         if (this.locked || !this.root.offsetParent) return;
+        if (e.key === 'Escape') { this.togglePopover(false); return; }
         if (e.target.closest && e.target.closest('input, textarea')) return;
         const k = e.key.toLowerCase();
         if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'я')) {
@@ -185,8 +252,15 @@
       const rgb = hexToRgb(hex);
       if (!rgb) return false;
       this.color = rgb;
+      this.hsv = rgbToHsv(rgb);
       this.syncUI();
       return true;
+    }
+
+    setHsv(hsv) {
+      this.hsv = hsv;
+      this.color = hsvToRgb(hsv);
+      this.syncUI();
     }
 
     syncUI() {
@@ -196,26 +270,43 @@
       this.q('[data-action="shape-fill"]').innerHTML = svg(this.fillShapes
         ? '<rect x="5" y="5" width="14" height="14" rx="1" fill="currentColor"/>'
         : '<rect x="5" y="5" width="14" height="14" rx="1"/>');
-      this.q('[data-action="undo"]').disabled = this.undoStack.length === 0;
-      this.q('[data-action="redo"]').disabled = this.redoStack.length === 0;
+      if (!this.locked) {
+        this.q('[data-action="undo"]').disabled = this.undoStack.length === 0;
+        this.q('[data-action="redo"]').disabled = this.redoStack.length === 0;
+      }
       this.q('[data-input="size"]').value = this.size;
       this.q('[data-out="size"]').textContent = this.size;
       this.q('[data-input="opacity"]').value = Math.round(this.opacity * 100);
       this.q('[data-out="opacity"]').textContent = Math.round(this.opacity * 100) + '%';
-      const { r, g, b } = this.color;
+
+      // Прямоугольник активного цвета (с учётом прозрачности — видно шахматку).
+      const fill = this.q('.color-btn__fill');
+      fill.style.background = hex;
+      fill.style.opacity = this.opacity;
+      this.q('[data-action="color"]').title = `Цвет ${hex.toUpperCase()} — нажмите, чтобы выбрать`;
+
+      // Цветовой круг.
+      const { h, s, v } = this.hsv;
+      this.q('.wheel__shade').style.opacity = 1 - v;
+      const marker = this.q('.wheel__marker');
+      const rad = (h * Math.PI) / 180;
+      marker.style.left = `${50 + Math.cos(rad) * s * 50}%`;
+      marker.style.top = `${50 + Math.sin(rad) * s * 50}%`;
+      marker.style.background = hex;
+      const pure = rgbToHex(hsvToRgb({ h, s, v: 1 }));
+      const valueRange = this.q('[data-input="value"]');
+      valueRange.value = Math.round(v * 100);
+      valueRange.style.background = `linear-gradient(to right, #000, ${pure})`;
       for (const c of ['r', 'g', 'b']) {
-        this.q(`[data-input="${c}"]`).value = this.color[c];
-        this.q(`[data-input="${c}-num"]`).value = this.color[c];
+        const input = this.q(`[data-input="${c}"]`);
+        if (document.activeElement !== input) input.value = this.color[c];
       }
-      // Градиенты на ползунках RGB показывают, как изменится цвет.
-      this.q('[data-input="r"]').style.background = `linear-gradient(to right, rgb(0,${g},${b}), rgb(255,${g},${b}))`;
-      this.q('[data-input="g"]').style.background = `linear-gradient(to right, rgb(${r},0,${b}), rgb(${r},255,${b}))`;
-      this.q('[data-input="b"]').style.background = `linear-gradient(to right, rgb(${r},${g},0), rgb(${r},${g},255))`;
-      this.q('[data-input="native"]').value = hex;
-      this.q('[data-input="hex"]').value = hex;
-      this.root.querySelectorAll('.swatch').forEach((s) => s.classList.toggle('is-active', s.dataset.color === hex));
+      const hexInput = this.q('[data-input="hex"]');
+      if (document.activeElement !== hexInput) hexInput.value = hex;
+      this.root.querySelectorAll('.swatch').forEach((sw) => sw.classList.toggle('is-active', sw.dataset.color === hex));
+
       const dot = this.q('.paint__preview span');
-      const d = Math.max(2, Math.min(40, this.size));
+      const d = Math.max(2, Math.min(44, this.size));
       dot.style.width = dot.style.height = d + 'px';
       dot.style.background = this.tool === 'eraser' ? PAPER : hex;
       dot.style.opacity = this.opacity;
@@ -265,6 +356,7 @@
 
     setLocked(locked) {
       this.locked = locked;
+      if (locked) this.togglePopover(false);
       this.lockEl.classList.toggle('hidden', !locked);
       this.root.classList.toggle('is-locked', locked);
       this.root.querySelectorAll('button, input').forEach((el) => { el.disabled = locked; });
@@ -301,7 +393,7 @@
       }
       if (this.tool === 'picker') {
         const d = this.ctx.getImageData(Math.floor(p.x), Math.floor(p.y), 1, 1).data;
-        this.color = { r: d[0], g: d[1], b: d[2] };
+        this.setColor(rgbToHex({ r: d[0], g: d[1], b: d[2] }));
         this.setTool('brush');
         return;
       }
